@@ -1,42 +1,271 @@
 import sys
-import csv
-def createTree(Instances, labels):
-    # create tree code
-    pass
+import pandas as pd
+import numpy as np
+import random
 
-def processDataSet(dataSet):
-    data = []
-    attribute = []
-    classValues = []
-    with open(dataSet) as csvDataFile:
-        csvReader = csv.reader(csvDataFile)
-        for row in csvReader:
-            data.append(row)
-            classValues.append(row[-1])
-        attribute = data[0]
-        # print(attribute)
-        data.remove(attribute)
-        classValues.remove('Class')
-        # classValues = [examples[-1] for examples in data]
-        # print(np.size(data,0))
-        return data, attribute, classValues
+rank = 0
+node_ranking = {}
+
+
+class Tree(object):
+    def __init__(self):
+        self.child = [None] * 2
+        self.accuracy = []
+        self.data = None
+        self.rank = -1
+        self.is_visited = False
+
+
+def get_count_attrib(data):
+    return np.array(np.unique(data, return_counts=True))
+
+
+def get_count_attrib_correctness(data, index):
+    success = np.array([[0, 1], [0, 0]])
+    for i in range(0, np.shape(data)[0]):
+        if int(data[i][-1]) == 0:
+            success[1][0] = success[1][0] + 1
+        else:
+            success[1][1] = success[1][1] + 1
+    return success
+
+
+def split_data_set(data, index, val):
+    new_data = []
+    for d in data:
+        if int(d[index]) == int(val):
+            new_data.append(d)
+    return new_data
+
+
+def variance_impurity(data):
+    val, val_freq = np.unique(data[:, -1], return_counts=True)
+    val_probability = val_freq / len(data)
+    if len(val_probability) == 2:
+        variance_imp = val_probability[0] * val_probability[1]
+    else:
+        variance_imp = 0.0
+    return variance_imp
+
+
+def entropy(data, entropy_or_var_imp):
+    if entropy_or_var_imp:
+        val, val_freq = np.unique(data[:, -1], return_counts=True)
+        val_probability = val_freq / len(data)
+        attr_entropy = -val_probability.dot(np.log2(val_probability))
+        # print("entropy", attr_entropy)
+        return attr_entropy
+    else:
+        return variance_impurity(data)
+
+
+def heuristic_function(data, m, entropy_or_var_imp=True):
+    base_entropy = entropy(data, entropy_or_var_imp)
+    best_feature = None
+    best_info_gain = -1.0
+    for i in range(0, m):
+        attribute_frequency = get_count_attrib(data[:, i])
+        entr = 0.0
+        for j in attribute_frequency[0]:
+            new_data = np.array(split_data_set(data, i, j))
+            prob = len(new_data) / float(len(data))
+            entr += prob * entropy(new_data, entropy_or_var_imp)
+        info_gain = base_entropy - entr
+        if best_info_gain < info_gain:
+            best_info_gain = info_gain
+            best_feature = i
+
+    # print(best_feature, best_info_gain, info_gain)
+    return best_feature
+
+
+def create_decision_tree(data, labels, heuristic='entropy'):
+    # no of features
+    m = np.shape(data)[1] - 1
+    target_val = [ex[-1] for ex in data]
+
+    # return the first element if all are +ve or -ve case
+    if target_val.count(target_val[0]) == len(target_val):
+        new_node = Tree()
+        new_node.data = target_val[0]
+        if int(target_val[0]) == 0:
+            new_node.accuracy = [str(len(target_val)) + "-"]
+        else:
+            new_node.accuracy = [str(len(target_val)) + "+"]
+        return new_node
+
+    if m == 0:
+        return None
+
+    if heuristic == 'entropy':
+        best_feature = heuristic_function(data, m, True)
+    else:
+        best_feature = heuristic_function(data, m, False)
+    best_feature_label = labels[best_feature]
+    best_feature_frequency = get_count_attrib_correctness(data, best_feature)
+    decision_tree_node = Tree()
+    decision_tree_node.data = best_feature_label
+    decision_tree_node.accuracy = np.array(
+        [str(best_feature_frequency[1][0]) + "-", str(best_feature_frequency[1][1]) + "+"])
+
+    labels = np.delete(labels, best_feature)
+    for val in best_feature_frequency[0]:
+        refined_data = split_data_set(data, best_feature, val)
+        if np.shape(refined_data)[0] != 0:
+            refined_data = np.delete(refined_data, best_feature, axis=1)
+            b = create_decision_tree(refined_data, labels, heuristic)
+            if b is not None:
+                decision_tree_node.child[int(val)] = b
+    return decision_tree_node
+
+
+def print_decision_tree_graph(generated_decision_tree_graph, depth=0):
+    if generated_decision_tree_graph is None or generated_decision_tree_graph.child[0] is None:
+        return
+    else:
+        i = len(generated_decision_tree_graph.child)
+        while i > 0:
+            i = i - 1
+            tar = ""
+            if generated_decision_tree_graph.child[i] is not None and len(
+                    generated_decision_tree_graph.child[i].accuracy) == 1:
+                if str(generated_decision_tree_graph.child[i].accuracy[0])[-1] == "-":
+                    tar = 1
+                else:
+                    tar = 0
+            print("| " * depth + generated_decision_tree_graph.data, "=", i, ":", tar)
+            print_decision_tree_graph(generated_decision_tree_graph.child[i], depth + 1)
+
+
+def load_data_set(filename):
+    data_set = np.array(pd.read_csv(filename, header=None))
+    return data_set[1:, :], data_set[0, :-1]
+
+
+def test_decision_tree(decision_tree, test_data, test_label):
+    accuracy = 0
+    i = 1
+    # print(len(test_data))
+    for data in test_data:
+        tree = decision_tree
+        while True:
+            index = np.where(test_label == tree.data)[0]
+            if len(index) == 1 and tree.child[int(data[index])] is not None:
+                tree = tree.child[int(data[index])]
+            else:
+                break
+        if tree.data == data[-1]:
+            accuracy = accuracy + 1
+
+    return round(accuracy * 100 / len(test_data), 3)
+
+
+def dfs(graph, start, visited=None):
+    global rank
+    global node_ranking
+    if start.data != str(0) and start.data != str(1):
+        start.rank = rank
+        node_ranking[rank] = start
+        rank = rank + 1
+    start.is_visited = True
+    for index, child in enumerate(start.child):
+        if child is not None and not child.is_visited:
+            dfs(graph, child, visited)
+    return graph
+
+
+def prune(decision_tree_copy_prune, validation_set, validation_labels, m):
+    for j in range(1, m):
+        n = rank - 1
+        p = random.randint(1, n)
+        visited, stack = set(), [decision_tree_copy_prune]
+        while stack and p > 0:
+            p = p - 1
+            start_node = stack.pop()
+            if start_node not in visited:
+                visited.add(start_node)
+                for child in start_node.child:
+                    if child is not None and child not in visited:
+                        stack.append(child)
+
+        if len(start_node.accuracy) == 2 and start_node.data != 1 and start_node.data != 0:
+            neg = int(start_node.accuracy[0][:-1])
+            pos = int(start_node.accuracy[1][:-1])
+            if neg > pos:
+                start_node.data = 0
+            else:
+                start_node.data = 1
+            start_node.child[0] = None
+            start_node.child[1] = None
+    accuracy = test_decision_tree(decision_tree_copy_prune, validation_set, validation_labels)
+    return accuracy
+
+
+def post_pruning(decision_tree_copy, l, k, validation_set, validation_labels, old_accuracy):
+    best_decision_tree = None
+    global rank
+    for i in range(1, int(l)):
+        temp_decision_tree = decision_tree_copy
+        m = random.randint(1, int(k))
+        updated_accuracy = prune(temp_decision_tree, validation_set, validation_labels, m)
+        if old_accuracy < updated_accuracy:
+            best_decision_tree = temp_decision_tree
+            old_accuracy = updated_accuracy
+    return best_decision_tree
+
 
 def main():
-    # Take inputs from the command line
-    argumentList =['L', 'K', 'training_set', 'validation_set', 'test_set','to_print']
-    argValues ={}
+    if sys.argv.__len__() == 7:
+        L = sys.argv[1]
+        K = sys.argv[2]
+        training_set_filename = sys.argv[3]
+        validation_set_filename = sys.argv[4]
+        test_set_filename = sys.argv[5]
+        to_print = sys.argv[6].lower()
 
-    if(len(sys.argv)!=7):
-        print("improper number of arguments")
-        return 0
-    for x in range(0,6):
-        argValues[argumentList[x]] = sys.argv[x+1] #Store argument value in argValues variable
-    # print(argValues)
+        # loading data sets
+        training_set, labels = load_data_set(training_set_filename)
+        test_set, test_labels = load_data_set(test_set_filename)
+        validation_set, validation_labels = load_data_set(validation_set_filename)
 
-    # Creating a tree
-    Instances, labels, classValue = processDataSet(argValues['training_set'])
-    mytree = createTree(Instances, labels)
-    # VItree = createTreeForVI(myDat, labels)
+        print('---------------------- Information Gain Heuristic -------------------')
+        generated_decision_tree_graph = create_decision_tree(training_set, labels, 'entropy')
+        generated_decision_tree_graph = dfs(generated_decision_tree_graph, generated_decision_tree_graph)
+        if to_print == 'yes':
+            print_decision_tree_graph(generated_decision_tree_graph)
+
+        acc = test_decision_tree(generated_decision_tree_graph, validation_set, validation_labels)
+        print('Efficiency for Decision tree before pruning')
+        print('Accuracy for the Validation Data', acc)
+        print('Accuracy for the Test Data', test_decision_tree(generated_decision_tree_graph, test_set, test_labels))
+
+        updated_decision_tree = post_pruning(generated_decision_tree_graph, L, K, validation_set, validation_labels, acc)
+        if updated_decision_tree is None:
+            updated_decision_tree = generated_decision_tree_graph
+        new_acc = test_decision_tree(updated_decision_tree, validation_set, test_labels)
+        print('Accuracy for the decision tree post pruning is', new_acc)
+
+        print()
+        print('---------------------- Variance Impurity Heuristic -------------------')
+        generated_decision_tree_graph_vi = create_decision_tree(training_set, labels, 'var_imp')
+        generated_decision_tree_graph_vi = dfs(generated_decision_tree_graph_vi, generated_decision_tree_graph_vi)
+        if to_print == 'yes':
+            print_decision_tree_graph(generated_decision_tree_graph_vi)
+
+        acc = test_decision_tree(generated_decision_tree_graph_vi, validation_set, validation_labels)
+        print('Efficiency for Decision tree before pruning')
+        print('Accuracy for the Validation Data', acc)
+        print('Accuracy for the Test Data', test_decision_tree(generated_decision_tree_graph_vi, test_set, test_labels))
+        updated_decision_tree_vi = post_pruning(generated_decision_tree_graph_vi, L, K, validation_set, validation_labels,
+                                                acc)
+        if updated_decision_tree_vi is None:
+            updated_decision_tree_vi = generated_decision_tree_graph_vi
+        new_acc = test_decision_tree(updated_decision_tree_vi, validation_set, test_labels)
+        print('Accuracy for the decision tree post pruning is', new_acc)
+
+    else:
+        print("Invalid number of arguments. Arguments required: <L> <K>",
+              "<training-set> <validation-set> <test-set> <to-print>")
 
 
 if __name__ == '__main__':
