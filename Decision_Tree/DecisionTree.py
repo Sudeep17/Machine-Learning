@@ -6,7 +6,6 @@ import random
 rank = 0
 node_ranking = {}
 
-
 class Tree(object):
     def __init__(self):
         self.child = [None] * 2
@@ -17,10 +16,21 @@ class Tree(object):
 
 
 def get_count_attrib(data):
+    """
+    returns the count for distinct value for the attribute
+    :param data: 1-D array of values for an attribute
+    :return: total number of unique value for the attribute in an array representation
+    """
     return np.array(np.unique(data, return_counts=True))
 
 
 def get_count_attrib_correctness(data, index):
+    """
+    returns count success rate based on value for ith attribute in data
+    :param data: data set
+    :param index: count success rate based on value for ith attribute in data
+    :return:
+    """
     success = np.array([[0, 1], [0, 0]])
     for i in range(0, np.shape(data)[0]):
         if int(data[i][-1]) == 0:
@@ -31,6 +41,13 @@ def get_count_attrib_correctness(data, index):
 
 
 def split_data_set(data, index, val):
+    """
+    keep only row which has given value for the column
+    :param data: dataset on which operation need to be done
+    :param index: index of the data on which operation need to be done
+    :param val: value to retain for the data
+    :return:
+    """
     new_data = []
     for d in data:
         if int(d[index]) == int(val):
@@ -39,6 +56,11 @@ def split_data_set(data, index, val):
 
 
 def variance_impurity(data):
+    """
+    calculate variance impurity for the data
+    :param data: data for the the single attribute
+    :return: variance impurity for the data
+    """
     val, val_freq = np.unique(data[:, -1], return_counts=True)
     val_probability = val_freq / len(data)
     if len(val_probability) == 2:
@@ -49,6 +71,13 @@ def variance_impurity(data):
 
 
 def entropy(data, entropy_or_var_imp):
+    """
+    Calculate entropy for an attribute
+    :param data: data for the the single attribute
+    :param entropy_or_var_imp: boolean attribute to denote which heuristic to use, True for Entropy and False for
+            Variance Impurity
+    :return: entropy in float representation
+    """
     if entropy_or_var_imp:
         val, val_freq = np.unique(data[:, -1], return_counts=True)
         val_probability = val_freq / len(data)
@@ -60,6 +89,14 @@ def entropy(data, entropy_or_var_imp):
 
 
 def heuristic_function(data, m, entropy_or_var_imp=True):
+    """
+    Calculate Information Gain for a attribute
+    :param data: data set on which heuristic to be done
+    :param m : number of features
+    :param entropy_or_var_imp: boolean attribute to denote which heuristic to use, True for Entropy and False for
+            Variance Impurity
+    :return: information gain in float representation
+    """
     base_entropy = entropy(data, entropy_or_var_imp)
     best_feature = None
     best_info_gain = -1.0
@@ -80,6 +117,14 @@ def heuristic_function(data, m, entropy_or_var_imp=True):
 
 
 def create_decision_tree(data, labels, heuristic='entropy'):
+    """
+    generate decision tree using the training data
+    :param data: data set using which decision tree need to created
+    :param labels: column label for the data set
+    :param heuristic: heuristic to be used to generate Decision tree
+    :return: decision tree
+    """
+
     # no of features
     m = np.shape(data)[1] - 1
     target_val = [ex[-1] for ex in data]
@@ -120,6 +165,11 @@ def create_decision_tree(data, labels, heuristic='entropy'):
 
 
 def print_decision_tree_graph(generated_decision_tree_graph, depth=0):
+    """
+    print the decision tree
+    :param generated_decision_tree_graph: decision tree which need to be printed
+    :param depth: to keep track of depth (optional)
+    """
     if generated_decision_tree_graph is None or generated_decision_tree_graph.child[0] is None:
         return
     else:
@@ -138,11 +188,21 @@ def print_decision_tree_graph(generated_decision_tree_graph, depth=0):
 
 
 def load_data_set(filename):
+    """
+    load the data set in memory
+    :param filename: path for the data set
+    :return: returns the data set
+    """
     data_set = np.array(pd.read_csv(filename, header=None))
     return data_set[1:, :], data_set[0, :-1]
 
 
 def test_decision_tree(decision_tree, test_data, test_label):
+    """
+    test the decision tree
+    :param decision_tree: generated decision tree
+    :param test_data: test data set for testing accuracy
+    """
     accuracy = 0
     i = 1
     # print(len(test_data))
@@ -161,6 +221,12 @@ def test_decision_tree(decision_tree, test_data, test_label):
 
 
 def dfs(graph, start, visited=None):
+    """
+    :param graph:
+    :param start:
+    :param visited:
+    :return:
+    """
     global rank
     global node_ranking
     if start.data != str(0) and start.data != str(1):
@@ -175,6 +241,13 @@ def dfs(graph, start, visited=None):
 
 
 def prune(decision_tree_copy_prune, validation_set, validation_labels, m):
+    """
+    :param decision_tree_copy_prune:
+    :param validation_set:
+    :param validation_labels:
+    :param m:
+    :return:
+    """
     for j in range(1, m):
         n = rank - 1
         p = random.randint(1, n)
@@ -202,6 +275,15 @@ def prune(decision_tree_copy_prune, validation_set, validation_labels, m):
 
 
 def post_pruning(decision_tree_copy, l, k, validation_set, validation_labels, old_accuracy):
+    """
+    :param decision_tree_copy:
+    :param l:
+    :param k:
+    :param validation_set:
+    :param validation_labels:
+    :param old_accuracy:
+    :return:
+    """
     best_decision_tree = None
     global rank
     for i in range(1, int(l)):
